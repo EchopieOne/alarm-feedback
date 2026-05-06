@@ -9,6 +9,9 @@ const FIELD_EMAIL = "Email";
 const FIELD_ATTACHMENT = "附件";
 const FIELD_PROCESSED = "处理";
 const FIELD_FINAL_REPLY = "最终回复邮件";
+const FEISHU_CODE_FIELD_NAME_NOT_FOUND = 1254045;
+const FEISHU_FIELD_TYPE_TEXT = 1;
+const FEISHU_FIELD_TYPE_CHECKBOX = 7;
 
 interface BitableRecord {
   record_id: string;
@@ -21,6 +24,11 @@ interface FeishuSource {
   name: string;
   appToken: string;
   tableId: string;
+}
+
+interface FeishuPayload {
+  code?: number;
+  msg?: string;
 }
 
 export async function listCases(env: Env, redis: RedisClient): Promise<FeedbackCase[]> {
@@ -66,7 +74,7 @@ async function listSourceRecords(source: FeishuSource, token: string): Promise<B
     }>();
 
     if (!response.ok || payload.code !== 0) {
-      throw new Error(`飞书读取失败 (${source.name}): ${payload.msg || response.statusText}`);
+      throw new Error(makeFeishuError("读取", source, response, payload));
     }
 
     records.push(...(payload.data?.items || []));
@@ -86,22 +94,119 @@ export async function updateCaseAfterSend(
   const { source, rawRecordId } = resolveRecordSource(env, recordId);
   const sentAt = new Date().toISOString();
   const finalReply = JSON.stringify({ ...finalMail, sentAt }, null, 2);
+  await updateRecordFields(source, token, rawRecordId, {
+    [FIELD_PROCESSED]: true,
+    [FIELD_FINAL_REPLY]: finalReply
+  });
+}
+
+export async function updateCaseAfterSubmit(
+  env: Env,
+  redis: RedisClient,
+  recordId: string,
+  solution: string
+): Promise<void> {
+  const token = await getTenantAccessToken(redis);
+  const { source, rawRecordId } = resolveRecordSource(env, recordId);
+  const submittedAt = new Date().toISOString();
+  const finalReply = JSON.stringify({ solution, submittedAt, delivery: "no_email" }, null, 2);
+  await updateRecordFields(source, token, rawRecordId, {
+    [FIELD_PROCESSED]: true,
+    [FIELD_FINAL_REPLY]: finalReply
+  });
+}
+
+async function updateRecordFields(
+  source: FeishuSource,
+  token: string,
+  rawRecordId: string,
+  fields: Record<string, unknown>
+): Promise<void> {
+  const firstResult = await putRecordFields(source, token, rawRecordId, fields);
+  if (isFeishuSuccess(firstResult.response, firstResult.payload)) return;
+
+  if (firstResult.payload.code !== FEISHU_CODE_FIELD_NAME_NOT_FOUND) {
+    throw new Error(makeFeishuError("回写", source, firstResult.response, firstResult.payload));
+  }
+
+  await ensureWritebackFields(source, token);
+  const retryResult = await putRecordFields(source, token, rawRecordId, fields);
+  if (!isFeishuSuccess(retryResult.response, retryResult.payload)) {
+    throw new Error(makeFeishuError("回写", source, retryResult.response, retryResult.payload));
+  }
+}
+
+async function putRecordFields(
+  source: FeishuSource,
+  token: string,
+  rawRecordId: string,
+  fields: Record<string, unknown>
+): Promise<{ response: Response; payload: FeishuPayload }> {
   const response = await fetch(
     `${FEISHU_BASE_URL}/bitable/v1/apps/${source.appToken}/tables/${source.tableId}/records/${rawRecordId}`,
     {
       method: "PUT",
       headers: feishuHeaders(token),
+      body: JSON.stringify({ fields })
+    }
+  );
+  const payload = await response.json<FeishuPayload>();
+  return { response, payload };
+}
+
+async function ensureWritebackFields(source: FeishuSource, token: string): Promise<void> {
+  const existingFields = await listTableFieldNames(source, token);
+  if (!existingFields.has(FIELD_PROCESSED)) {
+    await createTableField(source, token, FIELD_PROCESSED, FEISHU_FIELD_TYPE_CHECKBOX);
+  }
+  if (!existingFields.has(FIELD_FINAL_REPLY)) {
+    await createTableField(source, token, FIELD_FINAL_REPLY, FEISHU_FIELD_TYPE_TEXT);
+  }
+}
+
+async function listTableFieldNames(source: FeishuSource, token: string): Promise<Set<string>> {
+  const names = new Set<string>();
+  let pageToken: string | undefined;
+
+  do {
+    const url = new URL(`${FEISHU_BASE_URL}/bitable/v1/apps/${source.appToken}/tables/${source.tableId}/fields`);
+    url.searchParams.set("page_size", "100");
+    if (pageToken) url.searchParams.set("page_token", pageToken);
+
+    const response = await fetch(url, { headers: feishuHeaders(token) });
+    const payload = await response.json<{
+      code?: number;
+      msg?: string;
+      data?: { items?: Array<{ field_name?: string }>; page_token?: string; has_more?: boolean };
+    }>();
+    if (!isFeishuSuccess(response, payload)) {
+      throw new Error(makeFeishuError("读取", source, response, payload));
+    }
+
+    for (const item of payload.data?.items || []) {
+      if (item.field_name) names.add(item.field_name);
+    }
+    pageToken = payload.data?.has_more ? payload.data.page_token : undefined;
+  } while (pageToken);
+
+  return names;
+}
+
+async function createTableField(source: FeishuSource, token: string, fieldName: string, type: number): Promise<void> {
+  const response = await fetch(
+    `${FEISHU_BASE_URL}/bitable/v1/apps/${source.appToken}/tables/${source.tableId}/fields`,
+    {
+      method: "POST",
+      headers: feishuHeaders(token),
       body: JSON.stringify({
-        fields: {
-          [FIELD_PROCESSED]: true,
-          [FIELD_FINAL_REPLY]: finalReply
-        }
+        field_name: fieldName,
+        type
       })
     }
   );
-  const payload = await response.json<{ code: number; msg?: string }>();
-  if (!response.ok || payload.code !== 0) {
-    throw new Error(`飞书回写失败 (${source.name}): ${payload.msg || response.statusText}`);
+  const payload = await response.json<FeishuPayload>();
+  if (!isFeishuSuccess(response, payload)) {
+    throw new Error(makeFeishuError("回写", source, response, payload));
   }
 }
 
@@ -140,6 +245,24 @@ function feishuHeaders(token: string): HeadersInit {
     "Content-Type": "application/json",
     Authorization: `Bearer ${token}`
   };
+}
+
+function isFeishuSuccess(response: Response, payload: FeishuPayload): boolean {
+  return response.ok && payload.code === 0;
+}
+
+function makeFeishuError(
+  action: "读取" | "回写",
+  source: FeishuSource,
+  response: Response,
+  payload: { code?: number; msg?: string }
+): string {
+  const detail = payload.msg || response.statusText;
+  const code = payload.code == null ? "" : ` code=${payload.code}`;
+  const hint = response.status === 403 || detail.toLowerCase().includes("forbidden")
+    ? "。请检查飞书开放平台是否已开通多维表格写权限，并确认该应用已被添加到目标多维表格/文档应用且有可编辑权限；权限变更后需要重新刷新 tenant_access_token。"
+    : "";
+  return `飞书${action}失败 (${source.name}): ${detail}${code}, status=${response.status}${hint}`;
 }
 
 function getFeishuSources(env: Env): FeishuSource[] {

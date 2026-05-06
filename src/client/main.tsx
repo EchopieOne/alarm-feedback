@@ -197,6 +197,7 @@ function CaseList({ cases, selectedId, onSelect }: { cases: FeedbackCase[]; sele
 }
 
 function CaseDetail({ feedback, onDraft, onSent }: { feedback: FeedbackCase; onDraft: (recordId: string, draft: Draft) => void; onSent: (recordId: string) => void }) {
+  const hasEmail = Boolean(feedback.email.trim());
   const [solution, setSolution] = useState(feedback.draft?.solution || "");
   const [to, setTo] = useState(feedback.draft?.to || feedback.email);
   const [subject, setSubject] = useState(feedback.draft?.subject || "");
@@ -213,7 +214,8 @@ function CaseDetail({ feedback, onDraft, onSent }: { feedback: FeedbackCase; onD
     setStatus({ type: "idle", message: "" });
   }, [feedback.recordId]);
 
-  const canSend = useMemo(() => to && subject && html && text && status.type !== "loading", [to, subject, html, text, status.type]);
+  const canSend = useMemo(() => hasEmail && to && subject && html && text && status.type !== "loading", [hasEmail, to, subject, html, text, status.type]);
+  const canSubmit = useMemo(() => !hasEmail && solution.trim() && status.type !== "loading", [hasEmail, solution, status.type]);
 
   async function optimize() {
     setStatus({ type: "loading", message: "AI 正在生成草稿" });
@@ -257,6 +259,20 @@ function CaseDetail({ feedback, onDraft, onSent }: { feedback: FeedbackCase; onD
     }
   }
 
+  async function submitResult() {
+    setStatus({ type: "loading", message: "正在回写飞书" });
+    try {
+      await api(`/api/cases/${encodeURIComponent(feedback.recordId)}/submit`, {
+        method: "POST",
+        body: { solution }
+      });
+      setStatus({ type: "success", message: "结果已回写飞书" });
+      onSent(feedback.recordId);
+    } catch (error) {
+      setStatus({ type: "error", message: getErrorMessage(error) });
+    }
+  }
+
   function applyDraft(draft: Draft) {
     setTo(draft.to);
     setSubject(draft.subject);
@@ -282,11 +298,7 @@ function CaseDetail({ feedback, onDraft, onSent }: { feedback: FeedbackCase; onD
         <p>{feedback.content || "无反馈内容"}</p>
         {feedback.attachments.length > 0 && (
           <div className="attachments">
-            {feedback.attachments.map((item, index) => item.url ? (
-              <a href={item.url} key={`${item.name}-${index}`} target="_blank" rel="noreferrer">{item.name}</a>
-            ) : (
-              <span key={`${item.name}-${index}`}>{item.name}</span>
-            ))}
+            {feedback.attachments.map((item, index) => <AttachmentItem item={item} key={`${item.name}-${index}`} />)}
           </div>
         )}
       </div>
@@ -297,33 +309,59 @@ function CaseDetail({ feedback, onDraft, onSent }: { feedback: FeedbackCase; onD
       </label>
 
       <div className="actionRow">
-        <button className="secondaryButton" onClick={optimize} disabled={!solution || status.type === "loading"}><Sparkles size={16} />AI 优化</button>
-        <button className="ghostButton" onClick={save} disabled={!subject || status.type === "loading"}><Save size={16} />保存草稿</button>
-        <button className="primaryButton" onClick={send} disabled={!canSend}><Send size={16} />发送邮件</button>
+        {hasEmail ? (
+          <>
+            <button className="secondaryButton" onClick={optimize} disabled={!solution || status.type === "loading"}><Sparkles size={16} />AI 优化</button>
+            <button className="ghostButton" onClick={save} disabled={!subject || status.type === "loading"}><Save size={16} />保存草稿</button>
+            <button className="primaryButton" onClick={send} disabled={!canSend}><Send size={16} />发送邮件</button>
+          </>
+        ) : (
+          <button className="primaryButton" onClick={submitResult} disabled={!canSubmit}><Check size={16} />提交</button>
+        )}
       </div>
 
       {status.message && <StatusBanner status={status} />}
 
-      <div className="mailEditor">
-        <label className="fieldBlock">
-          收件人
-          <input value={to} onChange={(event) => setTo(event.target.value)} />
-        </label>
-        <label className="fieldBlock">
-          主题
-          <input value={subject} onChange={(event) => setSubject(event.target.value)} />
-        </label>
-        <label className="fieldBlock">
-          HTML
-          <textarea rows={9} value={html} onChange={(event) => setHtml(event.target.value)} />
-        </label>
-        <label className="fieldBlock">
-          Text
-          <textarea rows={7} value={text} onChange={(event) => setText(event.target.value)} />
-        </label>
-      </div>
+      {hasEmail && (
+        <div className="mailEditor">
+          <label className="fieldBlock">
+            收件人
+            <input value={to} onChange={(event) => setTo(event.target.value)} />
+          </label>
+          <label className="fieldBlock">
+            主题
+            <input value={subject} onChange={(event) => setSubject(event.target.value)} />
+          </label>
+          <label className="fieldBlock">
+            HTML
+            <textarea rows={9} value={html} onChange={(event) => setHtml(event.target.value)} />
+          </label>
+          <label className="fieldBlock">
+            Text
+            <textarea rows={7} value={text} onChange={(event) => setText(event.target.value)} />
+          </label>
+        </div>
+      )}
     </section>
   );
+}
+
+function AttachmentItem({ item }: { item: FeedbackCase["attachments"][number] }) {
+  if (!item.url) return <span>{item.name}</span>;
+  if (isImageAttachment(item)) {
+    return (
+      <a className="attachmentPreview" href={item.url} target="_blank" rel="noreferrer">
+        <img src={item.url} alt={item.name} loading="lazy" />
+        <span>{item.name}</span>
+      </a>
+    );
+  }
+  return <a href={item.url} target="_blank" rel="noreferrer">{item.name}</a>;
+}
+
+function isImageAttachment(item: FeedbackCase["attachments"][number]): boolean {
+  const value = `${item.name} ${item.url || ""}`.toLowerCase();
+  return /\.(png|jpe?g|gif|webp|bmp|svg)(?:[?#].*)?$/.test(value);
 }
 
 function StatusBanner({ status }: { status: Status }) {

@@ -1,7 +1,7 @@
 import { clearSessionCookie, createSessionCookie, isAuthenticated } from "./auth";
 import { generateMailDraft, makeDraft } from "./ai";
 import { sendEmail } from "./email";
-import { deleteDraft, getDraft, listCases, saveDraft, updateCaseAfterSend } from "./feishu";
+import { deleteDraft, getDraft, listCases, saveDraft, updateCaseAfterSend, updateCaseAfterSubmit } from "./feishu";
 import { RedisClient } from "./redis";
 import type { Draft, Env, FeedbackCase } from "./types";
 
@@ -48,7 +48,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     return json({ cases: await listCases(env, redis) });
   }
 
-  const match = url.pathname.match(/^\/api\/cases\/([^/]+)\/(optimize|draft|send)$/);
+  const match = url.pathname.match(/^\/api\/cases\/([^/]+)\/(optimize|draft|send|submit)$/);
   if (!match) return json({ error: "接口不存在" }, 404);
 
   const recordId = decodeURIComponent(match[1]);
@@ -77,6 +77,15 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     const mail = validateMail(body);
     await sendEmail(env, mail);
     await updateCaseAfterSend(env, redis, recordId, mail);
+    await deleteDraft(redis, recordId);
+    return json({ ok: true });
+  }
+
+  if (action === "submit" && request.method === "POST") {
+    const body = await request.json<{ solution?: string }>();
+    const solution = body.solution?.trim();
+    if (!solution) return json({ error: "请输入解决方案" }, 400);
+    await updateCaseAfterSubmit(env, redis, recordId, solution);
     await deleteDraft(redis, recordId);
     return json({ ok: true });
   }

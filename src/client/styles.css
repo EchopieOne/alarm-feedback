@@ -301,8 +301,8 @@ button:disabled {
 }
 
 .attachments {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
   gap: 8px;
   margin-top: 12px;
 }
@@ -315,6 +315,28 @@ button:disabled {
   color: #cfcfcf;
   font-size: 12px;
   text-decoration: none;
+}
+
+.attachmentPreview {
+  display: grid;
+  gap: 7px;
+  padding: 8px;
+}
+
+.attachmentPreview img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 6px;
+  object-fit: cover;
+  background: #181818;
+}
+
+.attachmentPreview span {
+  overflow: hidden;
+  padding: 0;
+  background: transparent;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .fieldBlock {
