@@ -12,6 +12,7 @@ const FIELD_FINAL_REPLY = "最终回复邮件";
 const FEISHU_CODE_FIELD_NAME_NOT_FOUND = 1254045;
 const FEISHU_FIELD_TYPE_TEXT = 1;
 const FEISHU_FIELD_TYPE_CHECKBOX = 7;
+const FEISHU_PAGE_SIZE = "500";
 
 interface BitableRecord {
   record_id: string;
@@ -41,14 +42,7 @@ export async function listCases(env: Env, redis: RedisClient): Promise<FeedbackC
     cases.push(...records.map((record) => mapRecordToCase(record, source)).filter((item) => !item.processed));
   }
 
-  const withDrafts = await Promise.all(
-    cases.map(async (item) => {
-      const draft = await getDraft(redis, item.recordId);
-      return draft ? { ...item, draft } : item;
-    })
-  );
-
-  return withDrafts;
+  return attachDrafts(redis, cases);
 }
 
 async function listSourceRecords(source: FeishuSource, token: string): Promise<BitableRecord[]> {
@@ -59,7 +53,7 @@ async function listSourceRecords(source: FeishuSource, token: string): Promise<B
     const url = new URL(
       `${FEISHU_BASE_URL}/bitable/v1/apps/${source.appToken}/tables/${source.tableId}/records/search`
     );
-    url.searchParams.set("page_size", "100");
+    url.searchParams.set("page_size", FEISHU_PAGE_SIZE);
     if (pageToken) url.searchParams.set("page_token", pageToken);
 
     const response = await fetch(url, {
@@ -220,6 +214,24 @@ export async function getTenantAccessToken(redis: RedisClient): Promise<string> 
 
 export async function getDraft(redis: RedisClient, recordId: string): Promise<Draft | undefined> {
   const raw = await redis.get(draftKey(recordId));
+  if (!raw) return undefined;
+  try {
+    return JSON.parse(raw) as Draft;
+  } catch {
+    return undefined;
+  }
+}
+
+async function attachDrafts(redis: RedisClient, cases: FeedbackCase[]): Promise<FeedbackCase[]> {
+  if (cases.length === 0) return cases;
+  const values = await redis.mget(cases.map((item) => draftKey(item.recordId)));
+  return cases.map((item, index) => {
+    const draft = parseDraft(values[index]);
+    return draft ? { ...item, draft } : item;
+  });
+}
+
+function parseDraft(raw: string | null): Draft | undefined {
   if (!raw) return undefined;
   try {
     return JSON.parse(raw) as Draft;

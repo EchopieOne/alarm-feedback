@@ -21,6 +21,13 @@ export class RedisClient {
     return typeof response === "string" ? response : null;
   }
 
+  async mget(keys: string[]): Promise<RedisValue[]> {
+    if (keys.length === 0) return [];
+    const response = await this.command(["MGET", ...keys]);
+    if (!Array.isArray(response)) return keys.map(() => null);
+    return response.map((item) => typeof item === "string" ? item : null);
+  }
+
   async setex(key: string, seconds: number, value: string): Promise<void> {
     await this.command(["SETEX", key, String(seconds), value]);
   }
@@ -125,6 +132,7 @@ function parseResponse(text: string, start: number): { value: unknown; next: num
   if (type === "+") return { value: line, next: lineEnd + 2 };
   if (type === "-") return { value: null, next: lineEnd + 2, error: line };
   if (type === ":") return { value: Number(line), next: lineEnd + 2 };
+  if (type === "*") return parseArrayResponse(text, lineEnd + 2, Number(line));
   if (type !== "$") return { value: null, next: lineEnd + 2, error: `Unsupported Redis response: ${type}` };
 
   const length = Number(line);
@@ -134,4 +142,25 @@ function parseResponse(text: string, start: number): { value: unknown; next: num
   const valueEnd = valueStart + length;
   if (text.length < valueEnd + 2) return null;
   return { value: text.slice(valueStart, valueEnd), next: valueEnd + 2 };
+}
+
+function parseArrayResponse(
+  text: string,
+  start: number,
+  length: number
+): { value: unknown[] | null; next: number; error?: string } | null {
+  if (length === -1) return { value: null, next: start };
+  const values: unknown[] = [];
+  let cursor = start;
+  let error: string | undefined;
+
+  for (let index = 0; index < length; index += 1) {
+    const parsed = parseResponse(text, cursor);
+    if (!parsed) return null;
+    cursor = parsed.next;
+    values.push(parsed.value);
+    if (parsed.error) error = parsed.error;
+  }
+
+  return { value: values, next: cursor, error };
 }
