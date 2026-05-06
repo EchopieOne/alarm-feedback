@@ -8,6 +8,10 @@ import type { Draft, Env, FeedbackCase } from "./types";
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    if (shouldRedirectToHttps(url)) {
+      url.protocol = "https:";
+      return Response.redirect(url.toString(), 301);
+    }
 
     if (url.pathname.startsWith("/api/")) {
       return handleApi(request, env, url).catch((error) => json({ error: getErrorMessage(error) }, 500));
@@ -16,6 +20,10 @@ export default {
     return env.ASSETS.fetch(request);
   }
 };
+
+function shouldRedirectToHttps(url: URL): boolean {
+  return url.protocol === "http:" && url.hostname !== "localhost" && url.hostname !== "127.0.0.1";
+}
 
 async function handleApi(request: Request, env: Env, url: URL): Promise<Response> {
   if (url.pathname === "/api/login" && request.method === "POST") {
