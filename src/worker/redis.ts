@@ -1,0 +1,137 @@
+import { connect } from "cloudflare:sockets";
+
+type RedisValue = string | null;
+
+interface RedisParts {
+  hostname: string;
+  port: number;
+  password?: string;
+  secure: boolean;
+}
+
+export class RedisClient {
+  private parts: RedisParts;
+
+  constructor(url: string) {
+    this.parts = parseRedisUrl(url);
+  }
+
+  async get(key: string): Promise<RedisValue> {
+    const response = await this.command(["GET", key]);
+    return typeof response === "string" ? response : null;
+  }
+
+  async setex(key: string, seconds: number, value: string): Promise<void> {
+    await this.command(["SETEX", key, String(seconds), value]);
+  }
+
+  async del(key: string): Promise<void> {
+    await this.command(["DEL", key]);
+  }
+
+  private async command(args: string[]): Promise<unknown> {
+    const socket = connect(
+      { hostname: this.parts.hostname, port: this.parts.port },
+      { secureTransport: this.parts.secure ? "on" : "off", allowHalfOpen: false }
+    );
+
+    const writer = socket.writable.getWriter();
+    const reader = socket.readable.getReader();
+    const chunks: Uint8Array[] = [];
+    const commands = this.parts.password
+      ? [["AUTH", this.parts.password], args]
+      : [args];
+
+    await writer.write(encodeCommands(commands));
+
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done || !value) break;
+      chunks.push(value);
+      const text = decodeChunks(chunks);
+      const parsed = parseAllResponses(text, commands.length);
+      if (parsed.complete) {
+        await writer.close().catch(() => undefined);
+        socket.close();
+        if (parsed.error) throw new Error(parsed.error);
+        return parsed.values[parsed.values.length - 1];
+      }
+    }
+
+    socket.close();
+    throw new Error("Redis response ended before command completed");
+  }
+}
+
+function parseRedisUrl(value: string): RedisParts {
+  const url = new URL(value);
+  if (url.protocol !== "redis:" && url.protocol !== "rediss:") {
+    throw new Error("REDIS_URL must start with redis:// or rediss://");
+  }
+  return {
+    hostname: url.hostname,
+    port: Number(url.port || (url.protocol === "rediss:" ? 6380 : 6379)),
+    password: url.password ? decodeURIComponent(url.password) : undefined,
+    secure: url.protocol === "rediss:"
+  };
+}
+
+function encodeCommands(commands: string[][]): Uint8Array {
+  const lines = commands
+    .map((args) => {
+      const parts = [`*${args.length}`];
+      for (const arg of args) {
+        parts.push(`$${new TextEncoder().encode(arg).length}`, arg);
+      }
+      return parts.join("\r\n");
+    })
+    .join("\r\n");
+  return new TextEncoder().encode(`${lines}\r\n`);
+}
+
+function decodeChunks(chunks: Uint8Array[]): string {
+  const size = chunks.reduce((total, chunk) => total + chunk.length, 0);
+  const merged = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return new TextDecoder().decode(merged);
+}
+
+function parseAllResponses(text: string, expected: number) {
+  const values: unknown[] = [];
+  let cursor = 0;
+  let error: string | undefined;
+
+  while (values.length < expected) {
+    const parsed = parseResponse(text, cursor);
+    if (!parsed) return { complete: false, values, error };
+    cursor = parsed.next;
+    values.push(parsed.value);
+    if (parsed.error) error = parsed.error;
+  }
+
+  return { complete: true, values, error };
+}
+
+function parseResponse(text: string, start: number): { value: unknown; next: number; error?: string } | null {
+  const type = text[start];
+  const lineEnd = text.indexOf("\r\n", start);
+  if (lineEnd === -1) return null;
+  const line = text.slice(start + 1, lineEnd);
+
+  if (type === "+") return { value: line, next: lineEnd + 2 };
+  if (type === "-") return { value: null, next: lineEnd + 2, error: line };
+  if (type === ":") return { value: Number(line), next: lineEnd + 2 };
+  if (type !== "$") return { value: null, next: lineEnd + 2, error: `Unsupported Redis response: ${type}` };
+
+  const length = Number(line);
+  if (length === -1) return { value: null, next: lineEnd + 2 };
+
+  const valueStart = lineEnd + 2;
+  const valueEnd = valueStart + length;
+  if (text.length < valueEnd + 2) return null;
+  return { value: text.slice(valueStart, valueEnd), next: valueEnd + 2 };
+}
