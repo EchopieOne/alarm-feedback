@@ -20,7 +20,7 @@ export async function generateMailDraft(env: Env, feedback: FeedbackCase, soluti
         {
           role: "system",
           content:
-            "You write concise, professional customer support emails. Detect the primary language of the user's original feedback and reply in that language. If the feedback is Chinese, reply in Chinese. If it is English, reply in English. Return strict JSON only with subject, html, and text string fields. Do not wrap JSON in markdown."
+            "You write concise, professional customer support emails. Detect the primary language of the user's original feedback and reply in that language. If the feedback is Chinese, reply in Chinese. If it is English, reply in English. Return strict JSON only with subject, html, and text string fields. Do not wrap JSON in markdown. Our team is Alarm One."
         },
         {
           role: "user",
