@@ -27,7 +27,7 @@ function shouldRedirectToHttps(url: URL): boolean {
 
 async function handleApi(request: Request, env: Env, url: URL): Promise<Response> {
   if (url.pathname === "/api/login" && request.method === "POST") {
-    const body = await request.json<{ username?: string; password?: string }>();
+    const body = await request.json() as { username?: string; password?: string };
     if (body.username !== env.ADMIN_USERNAME || body.password !== env.ADMIN_PASSWORD) {
       return json({ error: "用户名或密码错误" }, 401);
     }
@@ -63,7 +63,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
   const action = match[2];
 
   if (action === "optimize" && request.method === "POST") {
-    const body = await request.json<{ solution?: string }>();
+    const body = await request.json() as { solution?: string };
     const solution = body.solution?.trim();
     if (!solution) return json({ error: "请输入解决方案" }, 400);
 
@@ -81,7 +81,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
   }
 
   if (action === "send" && request.method === "POST") {
-    const body = await request.json<{ to?: string; subject?: string; html?: string; text?: string }>();
+    const body = await request.json() as { to?: string; subject?: string; html?: string; text?: string };
     const mail = validateMail(body);
     await sendEmail(env, mail);
     await updateCaseAfterSend(env, redis, recordId, mail);
@@ -90,7 +90,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
   }
 
   if (action === "submit" && request.method === "POST") {
-    const body = await request.json<{ solution?: string }>();
+    const body = await request.json() as { solution?: string };
     const solution = body.solution?.trim();
     if (!solution) return json({ error: "请输入解决方案" }, 400);
     await updateCaseAfterSubmit(env, redis, recordId, solution);
@@ -109,7 +109,7 @@ async function findCase(env: Env, redis: RedisClient, recordId: string): Promise
 }
 
 async function readDraftBody(request: Request, recordId: string): Promise<Draft> {
-  const body = await request.json<Partial<Draft>>();
+  const body = await request.json() as Partial<Draft>;
   const mail = validateMail(body);
   return {
     recordId,

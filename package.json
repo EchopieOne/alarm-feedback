@@ -8,10 +8,11 @@
   },
   "scripts": {
     "check:node": "node scripts/check-node-version.mjs",
-    "dev": "npm run build && wrangler dev --env-file .env.local --port 5173",
-    "build": "npm run check:node && vite build",
-    "preview": "npm run dev",
-    "deploy": "npm run build && wrangler deploy",
+    "dev": "npm run build && node dist/server.js",
+    "build": "npm run check:node && vite build && esbuild src/server.ts --bundle --platform=node --format=esm --outfile=dist/server.js",
+    "start": "node dist/server.js",
+    "preview": "npm run start",
+    "deploy": "npm run build",
     "typecheck": "npm run check:node && tsc --noEmit"
   },
   "dependencies": {
@@ -22,10 +23,10 @@
     "vite": "^7.2.6"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20251205.0",
+    "@types/node": "^24.10.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "typescript": "^5.9.3",
-    "wrangler": "^4.53.0"
+    "esbuild": "^0.27.0",
+    "typescript": "^5.9.3"
   }
 }

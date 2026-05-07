@@ -36,10 +36,10 @@ export async function generateMailDraft(env: Env, feedback: FeedbackCase, soluti
     })
   });
 
-  const payload = await response.json<{
+  const payload = await response.json() as {
     choices?: Array<{ message?: { content?: string } }>;
     error?: { message?: string };
-  }>();
+  };
 
   if (!response.ok) {
     throw new Error(`AI 草稿生成失败: ${payload.error?.message || response.statusText}`);

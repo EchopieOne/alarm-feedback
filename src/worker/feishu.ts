@@ -61,11 +61,11 @@ async function listSourceRecords(source: FeishuSource, token: string): Promise<B
       headers: feishuHeaders(token),
       body: JSON.stringify({})
     });
-    const payload = await response.json<{
+    const payload = await response.json() as {
       code: number;
       msg?: string;
       data?: { items?: BitableRecord[]; page_token?: string; has_more?: boolean };
-    }>();
+    };
 
     if (!response.ok || payload.code !== 0) {
       throw new Error(makeFeishuError("读取", source, response, payload));
@@ -144,7 +144,7 @@ async function putRecordFields(
       body: JSON.stringify({ fields })
     }
   );
-  const payload = await response.json<FeishuPayload>();
+  const payload = await response.json() as FeishuPayload;
   return { response, payload };
 }
 
@@ -168,11 +168,11 @@ async function listTableFieldNames(source: FeishuSource, token: string): Promise
     if (pageToken) url.searchParams.set("page_token", pageToken);
 
     const response = await fetch(url, { headers: feishuHeaders(token) });
-    const payload = await response.json<{
+    const payload = await response.json() as {
       code?: number;
       msg?: string;
       data?: { items?: Array<{ field_name?: string }>; page_token?: string; has_more?: boolean };
-    }>();
+    };
     if (!isFeishuSuccess(response, payload)) {
       throw new Error(makeFeishuError("读取", source, response, payload));
     }
@@ -198,7 +198,7 @@ async function createTableField(source: FeishuSource, token: string, fieldName: 
       })
     }
   );
-  const payload = await response.json<FeishuPayload>();
+  const payload = await response.json() as FeishuPayload;
   if (!isFeishuSuccess(response, payload)) {
     throw new Error(makeFeishuError("回写", source, response, payload));
   }

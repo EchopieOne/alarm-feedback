@@ -1,5 +1,9 @@
+export interface AssetFetcher {
+  fetch(request: Request): Promise<Response>;
+}
+
 export interface Env {
-  ASSETS: Fetcher;
+  ASSETS: AssetFetcher;
   ADMIN_USERNAME: string;
   ADMIN_PASSWORD: string;
   SESSION_SECRET: string;

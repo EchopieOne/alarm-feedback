@@ -8,9 +8,13 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM caddy:2-alpine
+FROM node:22-alpine AS runtime
 
-COPY Caddyfile /etc/caddy/Caddyfile
-COPY --from=build /app/dist/client /usr/share/caddy
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=8080
+
+COPY --from=build /app/dist ./dist
 
 EXPOSE 8080
+CMD ["node", "dist/server.js"]

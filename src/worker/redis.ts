@@ -1,4 +1,5 @@
-import { connect } from "cloudflare:sockets";
+import net from "node:net";
+import tls from "node:tls";
 
 type RedisValue = string | null;
 
@@ -37,37 +38,60 @@ export class RedisClient {
   }
 
   private async command(args: string[]): Promise<unknown> {
-    const socket = connect(
-      { hostname: this.parts.hostname, port: this.parts.port },
-      { secureTransport: this.parts.secure ? "on" : "off", allowHalfOpen: false }
-    );
-
-    const writer = socket.writable.getWriter();
-    const reader = socket.readable.getReader();
-    const chunks: Uint8Array[] = [];
     const commands = this.parts.password
       ? [["AUTH", this.parts.password], args]
       : [args];
+    return sendRedisCommand(this.parts, commands);
+  }
+}
 
-    await writer.write(encodeCommands(commands));
+async function sendRedisCommand(parts: RedisParts, commands: string[][]): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const chunks: Uint8Array[] = [];
+    const socket = parts.secure
+      ? tls.connect({ host: parts.hostname, port: parts.port, servername: parts.hostname })
+      : net.connect({ host: parts.hostname, port: parts.port });
 
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done || !value) break;
-      chunks.push(value);
+    const cleanup = () => {
+      socket.removeAllListeners();
+      socket.destroy();
+    };
+
+    socket.setTimeout(10_000);
+    const readyEvent = parts.secure ? "secureConnect" : "connect";
+    socket.once(readyEvent, () => {
+      socket.write(encodeCommands(commands), (error) => {
+        if (error) {
+          cleanup();
+          reject(error);
+        }
+      });
+    });
+    socket.on("data", (chunk: Buffer) => {
+      chunks.push(chunk);
       const text = decodeChunks(chunks);
       const parsed = parseAllResponses(text, commands.length);
-      if (parsed.complete) {
-        await writer.close().catch(() => undefined);
-        socket.close();
-        if (parsed.error) throw new Error(parsed.error);
-        return parsed.values[parsed.values.length - 1];
+      if (!parsed.complete) return;
+      cleanup();
+      if (parsed.error) {
+        reject(new Error(parsed.error));
+        return;
       }
-    }
-
-    socket.close();
-    throw new Error("Redis response ended before command completed");
-  }
+      resolve(parsed.values[parsed.values.length - 1]);
+    });
+    socket.once("timeout", () => {
+      cleanup();
+      reject(new Error("Redis request timed out"));
+    });
+    socket.once("error", (error) => {
+      cleanup();
+      reject(error);
+    });
+    socket.once("end", () => {
+      cleanup();
+      reject(new Error("Redis response ended before command completed"));
+    });
+  });
 }
 
 function parseRedisUrl(value: string): RedisParts {
