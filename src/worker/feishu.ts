@@ -7,6 +7,7 @@ const FIELD_FEEDBACK_TYPE = "反馈类型";
 const FIELD_CONTENT = "您对短信猎手有什么好的建议";
 const FIELD_EMAIL = "Email";
 const FIELD_ATTACHMENT = "附件";
+const FIELD_SUBMITTED_AT = "提交时间";
 const FIELD_PROCESSED = "处理";
 const FIELD_FINAL_REPLY = "最终回复邮件";
 const FEISHU_CODE_FIELD_NAME_NOT_FOUND = 1254045;
@@ -329,6 +330,7 @@ function mapRecordToCase(record: BitableRecord, source: FeishuSource): FeedbackC
     email: stringifyField(fields[FIELD_EMAIL]),
     attachments: parseAttachments(fields[FIELD_ATTACHMENT]),
     processed: Boolean(fields[FIELD_PROCESSED]),
+    submittedAt: stringifyField(fields[FIELD_SUBMITTED_AT]),
     updatedAt: record.last_modified_time
   };
 }

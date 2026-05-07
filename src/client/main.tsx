@@ -1,4 +1,4 @@
-import { AlertCircle, Archive, Bot, Check, FileText, Inbox, LogOut, Mail, Save, Send, Sparkles } from "lucide-react";
+import { AlertCircle, Archive, Bot, CalendarClock, Check, FileText, Inbox, LogOut, Mail, Save, Send, Sparkles } from "lucide-react";
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
@@ -22,6 +22,7 @@ interface FeedbackCase {
   email: string;
   attachments: Array<{ name: string; url?: string }>;
   processed: boolean;
+  submittedAt?: string;
   updatedAt?: string;
   draft?: Draft;
 }
@@ -186,6 +187,7 @@ function CaseList({ cases, selectedId, onSelect }: { cases: FeedbackCase[]; sele
               {item.draft && <em>草稿</em>}
             </span>
             <span className="sourceLine">{item.sourceName}</span>
+            <span className="timeLine">{formatFeedbackTime(item)}</span>
             <span className="emailLine">{item.email || "无邮箱"}</span>
             <span className="summaryLine">{item.content || "无内容"}</span>
           </button>
@@ -289,6 +291,7 @@ function CaseDetail({ feedback, onDraft, onSent }: { feedback: FeedbackCase; onD
           <span className="eyebrow">{feedback.feedbackType || "反馈"}</span>
           <h2>{feedback.email || "无邮箱"}</h2>
           <p className="sourceMeta">{feedback.sourceName}</p>
+          <p className="timeMeta"><CalendarClock size={14} />{formatFeedbackTime(feedback)}</p>
         </div>
         {feedback.draft && <span className="draftPill"><FileText size={14} />Redis 草稿</span>}
       </div>
@@ -362,6 +365,26 @@ function AttachmentItem({ item }: { item: FeedbackCase["attachments"][number] })
 function isImageAttachment(item: FeedbackCase["attachments"][number]): boolean {
   const value = `${item.name} ${item.url || ""}`.toLowerCase();
   return /\.(png|jpe?g|gif|webp|bmp|svg)(?:[?#].*)?$/.test(value);
+}
+
+function formatFeedbackTime(feedback: Pick<FeedbackCase, "submittedAt" | "updatedAt">): string {
+  const raw = feedback.submittedAt || feedback.updatedAt;
+  if (!raw) return "提交时间未知";
+
+  const numeric = Number(raw);
+  const value = Number.isFinite(numeric) && /^\d+$/.test(raw.trim())
+    ? new Date(numeric < 10_000_000_000 ? numeric * 1000 : numeric)
+    : new Date(raw);
+
+  if (Number.isNaN(value.getTime())) return raw;
+  return value.toLocaleString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  });
 }
 
 function StatusBanner({ status }: { status: Status }) {

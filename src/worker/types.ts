@@ -42,6 +42,7 @@ export interface FeedbackCase {
   email: string;
   attachments: Attachment[];
   processed: boolean;
+  submittedAt?: string;
   updatedAt?: string;
   draft?: Draft;
 }

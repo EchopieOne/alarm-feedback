@@ -249,6 +249,7 @@ button:disabled {
 }
 
 .sourceLine,
+.timeLine,
 .emailLine,
 .summaryLine {
   overflow: hidden;
@@ -262,6 +263,10 @@ button:disabled {
   color: #858585;
 }
 
+.timeLine {
+  color: #9dc9ff;
+}
+
 .sourceLine,
 .sourceMeta {
   color: #7f7f7f;
@@ -270,6 +275,15 @@ button:disabled {
 
 .sourceMeta {
   margin: 4px 0 0;
+}
+
+.timeMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  color: #bcbcbc;
+  font-size: 13px;
 }
 
 .detailPanel {
