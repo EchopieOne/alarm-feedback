@@ -111,6 +111,16 @@ export async function updateCaseAfterSubmit(
   });
 }
 
+export async function ignoreCase(env: Env, redis: RedisClient, recordId: string): Promise<void> {
+  const token = await getTenantAccessToken(redis);
+  const { source, rawRecordId } = resolveRecordSource(env, recordId);
+  const finalReply = JSON.stringify({ ignoredAt: new Date().toISOString(), delivery: "ignored" }, null, 2);
+  await updateRecordFields(source, token, rawRecordId, {
+    [FIELD_PROCESSED]: true,
+    [FIELD_FINAL_REPLY]: finalReply
+  });
+}
+
 async function updateRecordFields(
   source: FeishuSource,
   token: string,

@@ -391,9 +391,14 @@ textarea:focus {
 
 .actionRow {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 10px;
   margin: 0 18px;
+}
+
+.ignoreButton {
+  margin-right: auto;
 }
 
 .primaryButton,

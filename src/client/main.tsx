@@ -1,4 +1,4 @@
-import { AlertCircle, Archive, Bot, CalendarClock, Check, FileText, Inbox, LogOut, Mail, Save, Send, Sparkles } from "lucide-react";
+import { AlertCircle, Archive, Bot, CalendarClock, Check, EyeOff, FileText, Inbox, LogOut, Mail, Save, Send, Sparkles } from "lucide-react";
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
@@ -161,7 +161,7 @@ function Workbench({ user, onLogout }: { user: string; onLogout: () => void }) {
         <div className="workspaceGrid">
           <CaseList cases={cases.slice(0, CASE_DISPLAY_LIMIT)} selectedId={selectedId} onSelect={setSelectedId} />
           {selected ? (
-            <CaseDetail feedback={selected} onDraft={updateDraft} onSent={removeCase} />
+            <CaseDetail key={selected.recordId} feedback={selected} onDraft={updateDraft} onProcessed={removeCase} />
           ) : (
             <EmptyState />
           )}
@@ -203,7 +203,7 @@ function CaseList({ cases, selectedId, onSelect }: { cases: FeedbackCase[]; sele
   );
 }
 
-function CaseDetail({ feedback, onDraft, onSent }: { feedback: FeedbackCase; onDraft: (recordId: string, draft: Draft) => void; onSent: (recordId: string) => void }) {
+function CaseDetail({ feedback, onDraft, onProcessed }: { feedback: FeedbackCase; onDraft: (recordId: string, draft: Draft) => void; onProcessed: (recordId: string) => void }) {
   const hasEmail = Boolean(feedback.email.trim());
   const [solution, setSolution] = useState(feedback.draft?.solution || "");
   const [to, setTo] = useState(feedback.draft?.to || feedback.email);
@@ -260,7 +260,7 @@ function CaseDetail({ feedback, onDraft, onSent }: { feedback: FeedbackCase; onD
         body: { to, subject, html, text }
       });
       setStatus({ type: "success", message: "邮件已发送，飞书已更新" });
-      onSent(feedback.recordId);
+      onProcessed(feedback.recordId);
     } catch (error) {
       setStatus({ type: "error", message: getErrorMessage(error) });
     }
@@ -274,7 +274,17 @@ function CaseDetail({ feedback, onDraft, onSent }: { feedback: FeedbackCase; onD
         body: { solution }
       });
       setStatus({ type: "success", message: "结果已回写飞书" });
-      onSent(feedback.recordId);
+      onProcessed(feedback.recordId);
+    } catch (error) {
+      setStatus({ type: "error", message: getErrorMessage(error) });
+    }
+  }
+
+  async function ignore() {
+    setStatus({ type: "loading", message: "正在忽略反馈并回写飞书" });
+    try {
+      await api(`/api/cases/${encodeURIComponent(feedback.recordId)}/ignore`, { method: "POST" });
+      onProcessed(feedback.recordId);
     } catch (error) {
       setStatus({ type: "error", message: getErrorMessage(error) });
     }
@@ -317,6 +327,7 @@ function CaseDetail({ feedback, onDraft, onSent }: { feedback: FeedbackCase; onD
       </label>
 
       <div className="actionRow">
+        <button className="ghostButton ignoreButton" onClick={ignore} disabled={status.type === "loading"}><EyeOff size={16} />忽略反馈</button>
         {hasEmail ? (
           <>
             <button className="secondaryButton" onClick={optimize} disabled={!solution || status.type === "loading"}><Sparkles size={16} />AI 优化</button>
