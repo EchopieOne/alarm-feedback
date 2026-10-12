@@ -28,6 +28,7 @@ interface FeedbackCase {
 }
 
 type Status = { type: "idle" | "loading" | "success" | "error"; message: string };
+const CASE_DISPLAY_LIMIT = 50;
 
 function App() {
   const [user, setUser] = useState<string | null>(null);
@@ -92,8 +93,12 @@ function Workbench({ user, onLogout }: { user: string; onLogout: () => void }) {
     setStatus({ type: "loading", message: "正在读取飞书反馈" });
     try {
       const data = await api<{ cases: FeedbackCase[] }>("/api/cases");
-      setCases(data.cases);
-      setSelectedId((current) => current && data.cases.some((item) => item.recordId === current) ? current : data.cases[0]?.recordId || "");
+      const eligibleCases = data.cases
+        .filter((item) => !item.processed && item.email.trim())
+        .sort((a, b) => (feedbackTimestamp(b) ?? -Infinity) - (feedbackTimestamp(a) ?? -Infinity));
+      const visibleCases = eligibleCases.slice(0, CASE_DISPLAY_LIMIT);
+      setCases(eligibleCases);
+      setSelectedId((current) => current && visibleCases.some((item) => item.recordId === current) ? current : visibleCases[0]?.recordId || "");
       setStatus({ type: "idle", message: "" });
     } catch (error) {
       setStatus({ type: "error", message: getErrorMessage(error) });
@@ -154,7 +159,7 @@ function Workbench({ user, onLogout }: { user: string; onLogout: () => void }) {
         {status.type === "loading" && <StatusBanner status={status} />}
 
         <div className="workspaceGrid">
-          <CaseList cases={cases} selectedId={selectedId} onSelect={setSelectedId} />
+          <CaseList cases={cases.slice(0, CASE_DISPLAY_LIMIT)} selectedId={selectedId} onSelect={setSelectedId} />
           {selected ? (
             <CaseDetail feedback={selected} onDraft={updateDraft} onSent={removeCase} />
           ) : (
@@ -172,7 +177,7 @@ function CaseList({ cases, selectedId, onSelect }: { cases: FeedbackCase[]; sele
       <div className="panelHeader">
         <div>
           <h2>未处理反馈</h2>
-          <span>{cases.length} cases</span>
+          <span>最新 {cases.length} 条 · 按时间倒序</span>
         </div>
       </div>
       <div className="caseRows">
@@ -188,11 +193,11 @@ function CaseList({ cases, selectedId, onSelect }: { cases: FeedbackCase[]; sele
             </span>
             <span className="sourceLine">{item.sourceName}</span>
             <span className="timeLine">{formatFeedbackTime(item)}</span>
-            <span className="emailLine">{item.email || "无邮箱"}</span>
+            <span className="emailLine">{item.email}</span>
             <span className="summaryLine">{item.content || "无内容"}</span>
           </button>
         ))}
-        {cases.length === 0 && <div className="emptyList">没有未处理反馈</div>}
+        {cases.length === 0 && <div className="emptyList">没有有邮箱的未处理反馈</div>}
       </div>
     </section>
   );
@@ -367,16 +372,22 @@ function isImageAttachment(item: FeedbackCase["attachments"][number]): boolean {
   return /\.(png|jpe?g|gif|webp|bmp|svg)(?:[?#].*)?$/.test(value);
 }
 
+function feedbackTimestamp(feedback: Pick<FeedbackCase, "submittedAt" | "updatedAt">): number | undefined {
+  for (const raw of [feedback.submittedAt, feedback.updatedAt]) {
+    if (!raw?.trim()) continue;
+    const numeric = Number(raw);
+    const timestamp = Number.isFinite(numeric) && /^\d+$/.test(raw.trim())
+      ? new Date(numeric < 10_000_000_000 ? numeric * 1000 : numeric).getTime()
+      : new Date(raw).getTime();
+    if (Number.isFinite(timestamp)) return timestamp;
+  }
+  return undefined;
+}
+
 function formatFeedbackTime(feedback: Pick<FeedbackCase, "submittedAt" | "updatedAt">): string {
-  const raw = feedback.submittedAt || feedback.updatedAt;
-  if (!raw) return "提交时间未知";
-
-  const numeric = Number(raw);
-  const value = Number.isFinite(numeric) && /^\d+$/.test(raw.trim())
-    ? new Date(numeric < 10_000_000_000 ? numeric * 1000 : numeric)
-    : new Date(raw);
-
-  if (Number.isNaN(value.getTime())) return raw;
+  const timestamp = feedbackTimestamp(feedback);
+  if (timestamp === undefined) return "提交时间未知";
+  const value = new Date(timestamp);
   return value.toLocaleString("zh-CN", {
     year: "numeric",
     month: "2-digit",
