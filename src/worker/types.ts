@@ -33,6 +33,16 @@ export interface Draft {
   updatedAt: string;
 }
 
+export interface MailContent {
+  subject: string;
+  text: string;
+}
+
+export interface EmailReceipt {
+  id?: string;
+  status?: string;
+}
+
 export interface FeedbackCase {
   recordId: string;
   sourceId: string;

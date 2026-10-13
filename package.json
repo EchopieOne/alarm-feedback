@@ -8,12 +8,13 @@
   },
   "scripts": {
     "check:node": "node scripts/check-node-version.mjs",
-    "dev": "npm run build && node dist/server.js",
+    "dev": "npm run build && node --env-file-if-exists=.env --env-file-if-exists=.env.local dist/server.js",
     "build": "npm run check:node && vite build && esbuild src/server.ts --bundle --platform=node --format=esm --outfile=dist/server.js",
-    "start": "node dist/server.js",
+    "start": "node --env-file-if-exists=.env --env-file-if-exists=.env.local dist/server.js",
     "preview": "npm run start",
     "deploy": "npm run build",
-    "typecheck": "npm run check:node && tsc --noEmit"
+    "typecheck": "npm run check:node && tsc --noEmit",
+    "test": "npm run check:node && node --test tests/*.test.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.1.0",

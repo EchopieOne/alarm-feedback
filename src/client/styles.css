@@ -437,6 +437,30 @@ textarea:focus {
   gap: 14px;
 }
 
+.composePanel {
+  max-width: 900px;
+}
+
+.composeFields {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.composeHint {
+  margin: 0 18px;
+  color: #969696;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.restoreButton {
+  margin-right: auto;
+}
+
 .statusBanner {
   display: flex;
   align-items: center;

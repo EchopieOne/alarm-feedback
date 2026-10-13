@@ -38,12 +38,12 @@ function makeEnv(): Env {
     FEISHU_APP_TOKEN_2: process.env.FEISHU_APP_TOKEN_2,
     FEISHU_TABLE_ID_2: process.env.FEISHU_TABLE_ID_2,
     FEISHU_SOURCE_NAME_2: process.env.FEISHU_SOURCE_NAME_2,
-    REDIS_URL: getEnv("REDIS_URL"),
-    AI_API_KEY: getEnv("AI_API_KEY"),
-    AI_BASE_URL: getEnv("AI_BASE_URL"),
-    AI_MODEL: getEnv("AI_MODEL"),
-    ZEABUR_EMAIL_API_KEY: getEnv("ZEABUR_EMAIL_API_KEY"),
-    MAIL_FROM: getEnv("MAIL_FROM")
+    REDIS_URL: process.env.REDIS_URL || "",
+    AI_API_KEY: process.env.AI_API_KEY || "",
+    AI_BASE_URL: process.env.AI_BASE_URL || "",
+    AI_MODEL: process.env.AI_MODEL || "",
+    ZEABUR_EMAIL_API_KEY: process.env.ZEABUR_EMAIL_API_KEY || "",
+    MAIL_FROM: process.env.MAIL_FROM || ""
   };
 }
 

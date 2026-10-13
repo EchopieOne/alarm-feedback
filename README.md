@@ -2,6 +2,19 @@
 
 Cloudflare Worker + React 单页后台，用于从飞书多维表格处理未回复 feedback，生成 AI 邮件草稿，发送 Zeabur Email，并把最终邮件回写飞书。
 
+## 写邮件
+
+登录后点击侧栏「写邮件」，填写收件人、主题和正文即可发送，也可以先点击「AI 润色」。润色保留原文语言和含义；主题为空时会根据正文生成。润色后可以继续修改，或恢复润色前内容。切换到反馈页面再返回时，当前邮件内容会保留；刷新页面或退出登录会清空。
+
+发送使用已有的 `ZEABUR_EMAIL_API_KEY` 和 `MAIL_FROM`，润色使用 `AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL`，密钥仅在服务端读取。发送前不必调用 AI。独立邮件接口不需要飞书或 Redis 配置，也不关联反馈记录。
+
+- `POST /api/mail/optimize`：`{ "subject": "可选主题", "text": "待润色正文" }`，返回 `{ "draft": { "subject": "主题", "text": "正文" } }`。
+- `POST /api/mail/send`：`{ "to": "user@example.com", "subject": "主题", "text": "最终正文" }`，自动生成与正文一致的 HTML，返回邮件服务的提交回执。API 接受请求表示邮件已提交发送，最终投递状态以邮件服务为准。
+
+两个接口都需要登录，仅接受 POST。支持单个收件人，主题最多 200 字符，正文最多 20000 字符。邮件发送沿用 [Zeabur Email REST API](https://zeabur.com/docs/en-US/email/rest-api)。
+
+运行 `npm test` 可检查登录保护、输入校验、AI 润色、邮件提交和服务错误处理；测试使用模拟 API，不发送真实邮件。
+
 ## Local setup
 
 Use Node 22.12 or newer. This repo includes `.nvmrc`.
@@ -15,7 +28,7 @@ npm install
 
 2. Create `.env.local` from `.env.example`.
 
-3. Start local development. This runs the Cloudflare Worker and serves the React app from the same origin, so `/api/*` routes are available locally:
+3. Start local development. The Node server loads `.env` / `.env.local` and reuses the Worker routes, serving the React app and `/api/*` from the same origin. Existing process environment variables take precedence over these files:
 
 ```bash
 npm run dev

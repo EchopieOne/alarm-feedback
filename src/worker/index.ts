@@ -1,6 +1,7 @@
 import { clearSessionCookie, createSessionCookie, isAuthenticated } from "./auth";
 import { generateMailDraft, makeDraft } from "./ai";
 import { sendEmail } from "./email";
+import { handleCompose } from "./compose";
 import { deleteDraft, getDraft, ignoreCase, listCases, saveDraft, updateCaseAfterSend, updateCaseAfterSubmit } from "./feishu";
 import { RedisClient } from "./redis";
 import type { Draft, Env, FeedbackCase } from "./types";
@@ -46,11 +47,15 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     return json({ error: "未登录" }, 401);
   }
 
-  const redis = new RedisClient(env.REDIS_URL);
-
   if (url.pathname === "/api/me" && request.method === "GET") {
     return json({ username: env.ADMIN_USERNAME });
   }
+
+  if (url.pathname === "/api/mail/optimize" || url.pathname === "/api/mail/send") {
+    return handleCompose(request, env, url.pathname.endsWith("/optimize") ? "optimize" : "send");
+  }
+
+  const redis = new RedisClient(env.REDIS_URL);
 
   if (url.pathname === "/api/cases" && request.method === "GET") {
     return json({ cases: await listCases(env, redis) });

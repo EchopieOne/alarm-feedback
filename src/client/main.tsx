@@ -1,6 +1,8 @@
 import { AlertCircle, Archive, Bot, CalendarClock, Check, EyeOff, FileText, Inbox, LogOut, Mail, Save, Send, Sparkles } from "lucide-react";
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { api, getErrorMessage } from "./api";
+import { MailComposer } from "./MailComposer";
 import "./styles.css";
 
 interface Draft {
@@ -85,6 +87,7 @@ function Login({ onLogin }: { onLogin: (user: string) => void }) {
 }
 
 function Workbench({ user, onLogout }: { user: string; onLogout: () => void }) {
+  const [view, setView] = useState<"feedback" | "mail">("feedback");
   const [cases, setCases] = useState<FeedbackCase[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
   const [status, setStatus] = useState<Status>({ type: "loading", message: "正在读取飞书反馈" });
@@ -137,7 +140,8 @@ function Workbench({ user, onLogout }: { user: string; onLogout: () => void }) {
         </div>
         <nav className="navBlock">
           <span className="navLabel">Workspace</span>
-          <button className="navItem active"><Inbox size={16} />alarm-feedback</button>
+          <button className={`navItem ${view === "feedback" ? "active" : ""}`} onClick={() => setView("feedback")} aria-current={view === "feedback" ? "page" : undefined}><Inbox size={16} />alarm-feedback</button>
+          <button className={`navItem ${view === "mail" ? "active" : ""}`} onClick={() => setView("mail")} aria-current={view === "mail" ? "page" : undefined}><Mail size={16} />写邮件</button>
         </nav>
         <nav className="navBlock muted">
           <span className="navLabel">Coming soon</span>
@@ -149,22 +153,27 @@ function Workbench({ user, onLogout }: { user: string; onLogout: () => void }) {
       <section className="contentShell">
         <header className="topbar">
           <div>
-            <h1>alarm-feedback</h1>
-            <p>处理未回复反馈，生成邮件草稿并回写飞书。</p>
+            <h1>{view === "mail" ? "写邮件" : "alarm-feedback"}</h1>
+            <p>{view === "mail" ? "编辑邮件、AI 润色并发送。" : "处理未回复反馈，生成邮件草稿并回写飞书。"}</p>
           </div>
-          <button className="ghostButton" onClick={loadCases}>刷新</button>
+          {view === "feedback" && <button className="ghostButton" onClick={loadCases}>刷新</button>}
         </header>
 
-        {status.type === "error" && <StatusBanner status={status} />}
-        {status.type === "loading" && <StatusBanner status={status} />}
+        {view === "feedback" && status.type === "error" && <StatusBanner status={status} />}
+        {view === "feedback" && status.type === "loading" && <StatusBanner status={status} />}
 
-        <div className="workspaceGrid">
-          <CaseList cases={cases.slice(0, CASE_DISPLAY_LIMIT)} selectedId={selectedId} onSelect={setSelectedId} />
-          {selected ? (
-            <CaseDetail key={selected.recordId} feedback={selected} onDraft={updateDraft} onProcessed={removeCase} />
-          ) : (
-            <EmptyState />
-          )}
+        <div hidden={view !== "feedback"}>
+          <div className="workspaceGrid">
+            <CaseList cases={cases.slice(0, CASE_DISPLAY_LIMIT)} selectedId={selectedId} onSelect={setSelectedId} />
+            {selected ? (
+              <CaseDetail key={selected.recordId} feedback={selected} onDraft={updateDraft} onProcessed={removeCase} />
+            ) : (
+              <EmptyState />
+            )}
+          </div>
+        </div>
+        <div hidden={view !== "mail"}>
+          <MailComposer />
         </div>
       </section>
     </main>
@@ -426,22 +435,6 @@ function EmptyState() {
 
 function ShellLoading() {
   return <main className="loginPage"><div className="loadingText">加载中</div></main>;
-}
-
-async function api<T>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
-  const response = await fetch(path, {
-    method: options.method || "GET",
-    credentials: "same-origin",
-    headers: options.body ? { "Content-Type": "application/json" } : undefined,
-    body: options.body ? JSON.stringify(options.body) : undefined
-  });
-  const data = await response.json().catch(() => ({})) as { error?: string };
-  if (!response.ok) throw new Error(data.error || response.statusText);
-  return data as T;
-}
-
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "未知错误";
 }
 
 createRoot(document.getElementById("root")!).render(<App />);
